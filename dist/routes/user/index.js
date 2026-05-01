@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const dashboard_1 = require("./dashboard");
+const progress_1 = require("./progress");
+const settings_1 = require("./settings");
+const profile_1 = require("./profile");
+const account_1 = require("./account");
+const resetProgress_1 = require("./resetProgress");
+const auth_1 = require("../../middleware/auth");
+const router = (0, express_1.Router)();
+router.get("/dashboard", (0, auth_1.requireRole)(auth_1.ALL_ROLES), dashboard_1.getDashboard);
+router.get("/progress", (0, auth_1.requireRole)(auth_1.ALL_ROLES), progress_1.getProgress);
+router.get("/settings", (0, auth_1.requireRole)(auth_1.ALL_ROLES), settings_1.getSettings);
+router.patch("/settings", (0, auth_1.requireRole)(auth_1.ALL_ROLES), settings_1.patchSettings);
+router.patch("/profile", (0, auth_1.requireRole)(auth_1.ALL_ROLES), profile_1.patchProfile);
+router.delete("/account", (0, auth_1.requireRole)(auth_1.STUDENT_ONLY), account_1.deleteAccount);
+router.post("/reset-progress", (0, auth_1.requireRole)(auth_1.STUDENT_ONLY), resetProgress_1.postResetProgress);
+exports.default = router;
+//# sourceMappingURL=index.js.map
