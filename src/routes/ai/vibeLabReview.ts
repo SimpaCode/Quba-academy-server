@@ -344,15 +344,7 @@ export async function postVibeLabReview(
 
   // ── Parse body ─────────────────────────────────────────────────────────────
   const body = req.body as Record<string, unknown>;
-  const { action } = body;
-
-  if (action !== "review") {
-    res.status(400).json({
-      success: false,
-      msg: `Unknown action: '${String(action)}'. Expected 'review'.`,
-    });
-    return;
-  }
+  // const { action } = body;
 
   // ── Sanitise inputs ────────────────────────────────────────────────────────
   const userPrompt = sanitize(body.userPrompt, LIMITS.USER_PROMPT_MAX);
