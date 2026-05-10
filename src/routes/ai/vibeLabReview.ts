@@ -4,24 +4,18 @@
  * POST /api/ai/vibe-lab
  *
  * Vibe Lab Dojo — AI review endpoint.
- * Model: meta-llama/llama-3.1-8b-instruct via OpenRouter (free tier, fast).
+ * Model: meta-llama/llama-3.1-8b-instruct via OpenRouter.
  *
  * Body: { action: "review", scenario, userPrompt, evaluationCriteria?, techniqueId? }
  * Response: { verdict, overallFeedback, dimensions, improvementTip, mentorPrompt }
  *
  * Rate limiting:
  *   - Upstash sliding window (vibeLimiter): 15 req / 10 min per IP — via middleware in index.ts
- *   - In-memory sliding window: mirrors the Next.js original for per-IP granularity
- *     without extra Redis calls inside the handler. Resets on server restart.
- *     Upgrade to Redis-backed store for multi-instance production deployments.
- *
- * Setup: add OPENROUTER_API_KEY to .env
+ *   - No process-local limiter, so behavior stays consistent across instances.
  */
 
 import { Request, Response } from "express";
 import { requireEnv } from "../../config/env";
-
-// ── Constants ──────────────────────────────────────────────────────────────────
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MODEL = "meta-llama/llama-3.1-8b-instruct";
@@ -29,59 +23,8 @@ const MODEL = "meta-llama/llama-3.1-8b-instruct";
 const LIMITS = {
   USER_PROMPT_MAX: 1500,
   SCENARIO_MAX: 800,
-  CRITERIA_MAX: 2000,
   TIMEOUT_MS: 25_000,
 } as const;
-
-// ── In-memory rate limiter ─────────────────────────────────────────────────────
-// Mirrors the Next.js implementation exactly.
-// 15 requests per 10-minute sliding window per IP.
-
-const RATE = {
-  MAX_REQUESTS: 15,
-  WINDOW_MS: 10 * 60_000,
-  MAX_IPS: 5_000,
-} as const;
-
-type IPRecord = number[];
-const rateLimitStore = new Map<string, IPRecord>();
-
-function checkRateLimit(ip: string): {
-  allowed: boolean;
-  retryAfterSec: number;
-} {
-  const now = Date.now();
-  const windowStart = now - RATE.WINDOW_MS;
-
-  // Evict oldest entry if at capacity (simple LRU approximation)
-  if (!rateLimitStore.has(ip) && rateLimitStore.size >= RATE.MAX_IPS) {
-    const oldest = rateLimitStore.keys().next().value;
-    if (oldest) rateLimitStore.delete(oldest);
-  }
-
-  const timestamps = (rateLimitStore.get(ip) ?? []).filter(
-    (t) => t > windowStart,
-  );
-
-  if (timestamps.length >= RATE.MAX_REQUESTS) {
-    const oldest = timestamps[0];
-    const retryAfterMs = oldest + RATE.WINDOW_MS - now;
-    return { allowed: false, retryAfterSec: Math.ceil(retryAfterMs / 1000) };
-  }
-
-  timestamps.push(now);
-  rateLimitStore.set(ip, timestamps);
-  return { allowed: true, retryAfterSec: 0 };
-}
-
-function getClientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  const ip =
-    typeof forwarded === "string" ? forwarded.split(",")[0].trim() : null;
-  return ip ?? req.socket.remoteAddress ?? "unknown";
-}
-
-// ── AI caller ──────────────────────────────────────────────────────────────────
 
 async function callAI(
   systemPrompt: string,
@@ -133,17 +76,13 @@ async function callAI(
   }
 }
 
-// ── JSON extractor ─────────────────────────────────────────────────────────────
-
 function extractJSON(raw: string): unknown {
-  // 1. Direct parse
   try {
     return JSON.parse(raw);
   } catch {
     /* continue */
   }
 
-  // 2. Strip markdown fences
   const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
     try {
@@ -153,7 +92,6 @@ function extractJSON(raw: string): unknown {
     }
   }
 
-  // 3. Extract outermost { } block
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start !== -1 && end > start) {
@@ -167,8 +105,6 @@ function extractJSON(raw: string): unknown {
   throw new Error("Could not extract valid JSON from model response");
 }
 
-// ── Input sanitiser ────────────────────────────────────────────────────────────
-
 function sanitize(value: unknown, maxLen: number): string {
   if (typeof value !== "string") return "";
   return value
@@ -177,8 +113,6 @@ function sanitize(value: unknown, maxLen: number): string {
     .slice(0, maxLen)
     .trim();
 }
-
-// ── Review system prompt ───────────────────────────────────────────────────────
 
 const REVIEW_SYSTEM = `You are a concise, encouraging coding mentor at a beginner vibe-coding academy.
 Students are learning to build with HTML, Tailwind CSS, and vanilla JavaScript.
@@ -251,8 +185,6 @@ Respond ONLY in this exact JSON. No markdown fences, no extra keys:
 }`;
 }
 
-// ── Payload types & validator ──────────────────────────────────────────────────
-
 interface ReviewPayload {
   verdict: "PASS" | "RETRY";
   overallFeedback: string;
@@ -261,10 +193,7 @@ interface ReviewPayload {
   mentorPrompt: string;
 }
 
-function validateReview(
-  raw: unknown,
-  expectedCriteria: string[],
-): ReviewPayload {
+function validateReview(raw: unknown, expectedCriteria: string[]): ReviewPayload {
   const obj = (raw ?? {}) as Record<string, unknown>;
 
   if (obj.verdict !== "PASS" && obj.verdict !== "RETRY") obj.verdict = "RETRY";
@@ -313,40 +242,17 @@ function validateReview(
 
 const FALLBACK_RESPONSE: ReviewPayload = {
   verdict: "RETRY",
-  overallFeedback:
-    "The review couldn't complete — please try submitting again.",
+  overallFeedback: "The review couldn't complete — please try submitting again.",
   dimensions: [],
   improvementTip: "Try again — sometimes the model needs a second attempt.",
   mentorPrompt: "",
 };
 
-// ── Handler ────────────────────────────────────────────────────────────────────
-
 export async function postVibeLabReview(
   req: Request,
   res: Response,
 ): Promise<void> {
-  // ── In-memory rate limit (15 req / 10 min per IP) ──────────────────────────
-  const ip = getClientIp(req);
-  const { allowed, retryAfterSec } = checkRateLimit(ip);
-
-  if (!allowed) {
-    res.setHeader("Retry-After", String(retryAfterSec));
-    res.setHeader("X-RateLimit-Limit", String(RATE.MAX_REQUESTS));
-    res.setHeader("X-RateLimit-Window", "600");
-    res.status(429).json({
-      success: false,
-      msg: `Too many requests. You've used your ${RATE.MAX_REQUESTS} reviews for this 10-minute window. Try again in ${Math.ceil(retryAfterSec / 60)} minute${retryAfterSec > 60 ? "s" : ""}.`,
-      retryAfter: retryAfterSec,
-    });
-    return;
-  }
-
-  // ── Parse body ─────────────────────────────────────────────────────────────
   const body = req.body as Record<string, unknown>;
-  // const { action } = body;
-
-  // ── Sanitise inputs ────────────────────────────────────────────────────────
   const userPrompt = sanitize(body.userPrompt, LIMITS.USER_PROMPT_MAX);
   const scenario = sanitize(body.scenario, LIMITS.SCENARIO_MAX);
   const techniqueId =
@@ -366,12 +272,12 @@ export async function postVibeLabReview(
     res.status(400).json({ success: false, msg: "'userPrompt' is required." });
     return;
   }
+
   if (!scenario) {
     res.status(400).json({ success: false, msg: "'scenario' is required." });
     return;
   }
 
-  // Minimum length guard — avoids burning tokens on empty submissions
   if (userPrompt.length < 15) {
     res.status(200).json({
       verdict: "RETRY",
@@ -385,7 +291,6 @@ export async function postVibeLabReview(
     return;
   }
 
-  // ── Call AI ────────────────────────────────────────────────────────────────
   try {
     const raw = await callAI(
       REVIEW_SYSTEM,
@@ -396,16 +301,10 @@ export async function postVibeLabReview(
     const parsed = extractJSON(raw);
     const validated = validateReview(parsed, evaluationCriteria);
 
-    res.setHeader("X-RateLimit-Limit", String(RATE.MAX_REQUESTS));
-    res.setHeader(
-      "X-RateLimit-Remaining",
-      String(RATE.MAX_REQUESTS - (rateLimitStore.get(ip)?.length ?? 0)),
-    );
-    res.setHeader("X-RateLimit-Window", "600");
     res.status(200).json(validated);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[ai/vibe-lab]", { ip, techniqueId, error: message });
+    console.error("[ai/vibe-lab]", { techniqueId, error: message });
 
     if (message.includes("abort")) {
       res.status(504).json({
@@ -415,7 +314,6 @@ export async function postVibeLabReview(
       return;
     }
 
-    // Graceful fallback — UI won't crash, real error is logged server-side
     res.status(200).json(FALLBACK_RESPONSE);
   }
 }

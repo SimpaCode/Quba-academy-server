@@ -85,9 +85,9 @@ function formatLevel(level: LevelLean, progress: ProgressLike | null) {
   };
 }
 
-// Fields to exclude from every Level query — mirrors the Next.js .select()
-const EXCLUDE_MISSION_FIELDS =
-  "-missions.markdownContent -missions.checkpoint -missions.solution";
+// Project only the summary fields needed for the catalog view.
+const LEVEL_SUMMARY_FIELDS =
+  "levelId slug title vibeName description icon color plan missions.missionId missions.label missions.title missions.isPublished missions.order";
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -101,7 +101,7 @@ export async function getLevels(req: Request, res: Response): Promise<void> {
       const filter = planParam ? { plan: planParam } : {};
       const levels = await Level.find({ isPublished: true, ...filter })
         .sort({ order: 1 })
-        .select(EXCLUDE_MISSION_FIELDS)
+        .select(LEVEL_SUMMARY_FIELDS)
         .lean<LevelLean[]>();
 
       sendOk(
@@ -157,7 +157,7 @@ export async function getLevels(req: Request, res: Response): Promise<void> {
     const [levels, progress] = await Promise.all([
       Level.find({ isPublished: true, plan: planParam })
         .sort({ order: 1 })
-        .select(EXCLUDE_MISSION_FIELDS)
+        .select(LEVEL_SUMMARY_FIELDS)
         .lean<LevelLean[]>(),
       getOrCreateProgress(req.user!.id, unlockedPlans),
     ]);

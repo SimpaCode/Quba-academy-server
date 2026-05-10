@@ -121,7 +121,6 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
         plan: primaryPlan,
         unlockedPlans,
         planDetails,
-        paystackCustomerCode: dbUser.subscription?.paystackCustomerCode ?? null,
         renewsAt: dbUser.subscription?.renewsAt
           ? new Date(dbUser.subscription.renewsAt).toISOString()
           : null,

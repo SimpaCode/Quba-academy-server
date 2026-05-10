@@ -8,13 +8,13 @@ Production-ready Express + TypeScript API server. Designed to run alongside a Ne
 
 | Concern | Library |
 |---|---|
-| Framework | Express 4 |
+| Framework | Express 5 |
 | Language | TypeScript 5 |
-| Database | MongoDB via Mongoose 8 |
+| Database | MongoDB via Mongoose 9 |
 | Auth | JWT (`jsonwebtoken`) via cookie |
 | Rate limiting | Upstash Redis (`@upstash/ratelimit`) |
 | Validation | Zod |
-| AI streaming | OpenAI SDK (gpt-4o-mini) |
+| AI streaming | Groq + OpenRouter |
 | Security | Helmet, CORS |
 
 ---
@@ -207,5 +207,6 @@ Rate limit headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-R
 | `NEXT_PUBLIC_APP_URL_STAGING` | No | Optional staging CORS origin |
 | `UPSTASH_REDIS_REST_URL` | ✅ | Upstash Redis REST URL |
 | `UPSTASH_REDIS_REST_TOKEN` | ✅ | Upstash Redis REST token |
-| `OPENAI_API_KEY` | ✅ | OpenAI API key |
+| `GROQ_API_KEY` | ✅ | Groq API key |
+| `OPENROUTER_API_KEY` | ✅ | OpenRouter API key |
 | `PAYSTACK_SECRET_KEY` | No | Required only if paystackService is used |

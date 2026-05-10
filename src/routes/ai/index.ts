@@ -11,6 +11,7 @@ import {
   strictLimiter,
   vibeLimiter,
 } from "../../middleware/rateLimiter";
+import { requireTrustedOrigin } from "../../middleware/csrf";
 
 const router = Router();
 
@@ -18,6 +19,7 @@ const router = Router();
 router.post(
   "/explain",
   requireRole(ALL_ROLES),
+  requireTrustedOrigin,
   withRateLimit(strictLimiter),
   explainConcept,
 );
@@ -27,6 +29,7 @@ router.post(
 router.post(
   "/vibe-lab",
   requireRole(ALL_ROLES),
+  requireTrustedOrigin,
   withRateLimit(vibeLimiter),
   postVibeLabReview,
 );

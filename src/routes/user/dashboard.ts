@@ -174,10 +174,16 @@ export async function getDashboard(req: Request, res: Response): Promise<void> {
     const [primaryLevels, secondaryLevels, progress] = await Promise.all([
       Level.find({ isPublished: true, plan: primaryPlan })
         .sort({ order: 1 })
+        .select(
+          "levelId slug title vibeName icon color plan missions.missionId missions.label missions.title missions.subtitle missions.analogy missions.isPublished missions.order",
+        )
         .lean(),
       hasMultiplePlans
         ? Level.find({ isPublished: true, plan: secondaryPlan })
             .sort({ order: 1 })
+            .select(
+              "levelId slug title vibeName icon color plan missions.missionId missions.label missions.title missions.subtitle missions.analogy missions.isPublished missions.order",
+            )
             .lean()
         : Promise.resolve([]),
       getOrCreateProgress(req.user!.id, unlockedPlans),

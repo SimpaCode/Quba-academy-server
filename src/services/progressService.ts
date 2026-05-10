@@ -14,6 +14,9 @@ import { todayString, yesterdayString } from "../utils/dateUtils";
 
 export type DisplayMissionStatus = "not_started" | "active" | "completed";
 
+const LEVEL_PROGRESS_FIELDS =
+  "levelId slug plan missions.missionId missions.label missions.title missions.isPublished missions.order";
+
 // ── Runtime shim ──────────────────────────────────────────────
 
 export function resolveStoredStatus(raw: string | undefined): MissionStatus {
@@ -111,9 +114,9 @@ export async function getOrCreateProgress(
       ? { plan: { $in: unlockedPlans } }
       : {};
 
-  const levels = await Level.find({ isPublished: true, ...planFilter }).sort({
-    order: 1,
-  });
+  const levels = await Level.find({ isPublished: true, ...planFilter })
+    .sort({ order: 1 })
+    .select(LEVEL_PROGRESS_FIELDS);
 
   const missionProgress = new Map<string, IMissionProgress>();
   const levelStatus = new Map<string, LevelStatus>();
@@ -149,11 +152,21 @@ export async function getOrCreateProgress(
     }
   }
 
-  return UserProgress.create({
-    userId: new mongoose.Types.ObjectId(userId),
-    missionProgress,
-    levelStatus,
-  });
+  return UserProgress.findOneAndUpdate(
+    { userId: userObjectId },
+    {
+      $setOnInsert: {
+        userId: userObjectId,
+        missionProgress,
+        levelStatus,
+      },
+    },
+    {
+      upsert: true,
+      new: true,
+      setDefaultsOnInsert: true,
+    },
+  );
 }
 
 // ── seedNewPlanAccess ─────────────────────────────────────────
@@ -170,9 +183,9 @@ export async function seedNewPlanAccess(
     return;
   }
 
-  const levels = await Level.find({ isPublished: true, plan: newPlan }).sort({
-    order: 1,
-  });
+  const levels = await Level.find({ isPublished: true, plan: newPlan })
+    .sort({ order: 1 })
+    .select(LEVEL_PROGRESS_FIELDS);
 
   if (levels.length === 0) return;
 
@@ -303,7 +316,9 @@ export async function completeMission(
     const samePlanLevels = await Level.find({
       isPublished: true,
       plan: levelPlan,
-    }).sort({ order: 1 });
+    })
+      .sort({ order: 1 })
+      .select(LEVEL_PROGRESS_FIELDS);
 
     const currentLevelIdx = samePlanLevels.findIndex(
       (l) => l.slug === levelSlug,

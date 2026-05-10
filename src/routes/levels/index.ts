@@ -6,6 +6,7 @@ import { getMission } from "./mission";
 import { getMissionNav } from "./missionNav";
 import { completeMissionHandler } from "./completeMission";
 import { requireRole, ALL_ROLES, STUDENT_ONLY } from "../../middleware/auth";
+import { requireTrustedOrigin } from "../../middleware/csrf";
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.get(
 router.patch(
   "/:slug/missions/:missionId/complete",
   requireRole(STUDENT_ONLY),
+  requireTrustedOrigin,
   completeMissionHandler,
 );
 

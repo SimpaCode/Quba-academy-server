@@ -9,18 +9,27 @@
 import { CorsOptions } from "cors";
 import { requireEnv } from "./env";
 
-export function buildCorsOptions(): CorsOptions {
-  const allowedOrigins = [
-    requireEnv("NEXT_PUBLIC_APP_URL"),
-    process.env.NEXT_PUBLIC_APP_URL_STAGING,
-  ].filter(Boolean) as string[];
+const ALLOWED_ORIGINS = [
+  requireEnv("NEXT_PUBLIC_APP_URL"),
+  process.env.NEXT_PUBLIC_APP_URL_STAGING,
+].filter(Boolean) as string[];
 
+export function getAllowedOrigins(): string[] {
+  return [...ALLOWED_ORIGINS];
+}
+
+export function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  return ALLOWED_ORIGINS.includes(origin);
+}
+
+export function buildCorsOptions(): CorsOptions {
   return {
     origin: (origin, callback) => {
       // Allow requests with no origin (server-to-server, Postman, curl)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      if (ALLOWED_ORIGINS.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`Origin ${origin} not allowed by CORS`));

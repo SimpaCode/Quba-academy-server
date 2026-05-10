@@ -20,6 +20,7 @@ import { buildCorsOptions } from "./config/cors";
 import { requestLogger } from "./middleware/requestLogger";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
+import { defaultLimiter, withRateLimit } from "./middleware/rateLimiter";
 import router from "./routes/index";
 
 const app = express();
@@ -48,7 +49,7 @@ app.get("/health", (_req, res) => {
 });
 
 // ── API routes ────────────────────────────────────────────────────────────────
-app.use("/api", router);
+app.use("/api", withRateLimit(defaultLimiter), router);
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use(notFound);

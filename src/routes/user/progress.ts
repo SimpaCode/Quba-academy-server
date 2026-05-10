@@ -151,6 +151,9 @@ export async function getProgress(req: Request, res: Response): Promise<void> {
     const [levels, progress] = await Promise.all([
       Level.find({ isPublished: true, plan: effectivePlan })
         .sort({ order: 1 })
+        .select(
+          "levelId slug title vibeName icon color plan missions.missionId missions.label missions.title missions.isPublished missions.order",
+        )
         .lean(),
       getOrCreateProgress(targetUserId, unlockedPlans),
     ]);

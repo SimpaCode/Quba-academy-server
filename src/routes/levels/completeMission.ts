@@ -13,7 +13,9 @@ export async function completeMissionHandler(
     const { slug, missionId } = req.params;
 
     const level = await Level.findOne({ slug, isPublished: true })
-      .select("missions")
+      .select(
+        "missions.missionId missions.label missions.title missions.isPublished missions.order",
+      )
       .lean();
 
     if (!level) {

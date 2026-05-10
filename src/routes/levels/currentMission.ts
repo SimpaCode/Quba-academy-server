@@ -19,7 +19,9 @@ export async function getCurrentMission(
 
     const [level, progress] = await Promise.all([
       Level.findOne({ slug, isPublished: true })
-        .select("missions levelId slug")
+        .select(
+          "levelId slug missions.missionId missions.label missions.title missions.isPublished missions.order",
+        )
         .lean(),
       getOrCreateProgress(req.user!.id),
     ]);
